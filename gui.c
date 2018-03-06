@@ -2,16 +2,37 @@
 #define LOCAL_GUI_HEADER 1
 #include "gui.h"
 #endif
-
+void
+init_editor_struct_byref(struct editor *win){
+	//we print in sets of 8 bytes + 2 spaces in main window
+	//ascii win is just raw
+	//so 10 characters in mainwin equals 4 bytes in asciiwin
+	//(COLS-8) = 10x+4x
+	//		   = 14x
+	//(COLS-8)/14) = x
+	int pspace = COLS-8;
+	int scalar = pspace/14;
+	//the rest is 2char mainwin per char asciiwin
+	// remainder = 2x+x
+	// 			 = 3x
+	// remainder/3 = x
+	int left = (pspace%14)/3;
+	win->mainwin = newwin(LINES-1, (scalar*10)+(left*2), 0, 8);
+	win->asciiwin = newwin(LINES-1, scalar*4+left+1, 0, 1+8+(scalar*10)+(left*2));
+//	win->mainwin = newwin(LINES-1, (COLS-8)*3/4, 0, 8);
+//	win->asciiwin = newwin(LINES-1, ((COLS-8)*1/4), 0, ((COLS-8)*3/4)+8);	
+	win->offsetwin = newwin(LINES-1, 8, 0, 0);
+	win->cmdwin = newwin(1, COLS, LINES-1, 0);
+	win->pos_s = malloc(sizeof(struct positions));
+	win->pos_s->line_length = 0;
+	win->pos_s->last_segment_len = 0;
+	win->pos_s->fbyte_pos = 0;
+	return;
+}
 void 
 editor_entry(char *filename){
 	struct editor win;
-	//TODO make this mess nicer (?)
-	win.mainwin = newwin(LINES-1, (COLS-8)*3/4, 0, 8);
-	win.line_length = 0;
-	win.asciiwin = newwin(LINES-1, ((COLS-8)*1/4), 0, ((COLS-8)*3/4)+8);
-	win.offsetwin = newwin(LINES-1, 8, 0, 0);
-	win.cmdwin = newwin(1, COLS, LINES-1, 0);
+	init_editor_struct_byref(&win);
 	curs_set(1);
 	keypad(win.mainwin, TRUE);
 	keypad(win.asciiwin, TRUE);
@@ -23,16 +44,15 @@ editor_entry(char *filename){
 	wrefresh(win.offsetwin);
 	
 	struct file_buffer *f = alloc_file_buff(filename);
-	win.line_length = print_file(win, f);
+	print_file(win, f);
 	input_loop(win, f);
 	//TODO if we're here we should probably clean up malloc'd stuff
 	//before returning and exiting
+	return;
 }
-/* returns number of characters printed in a single line */
 void
 print_file(struct editor win, struct file_buffer *file){
 	int x, y;
-	int ll = 0;
 	WINDOW *mwin = win.mainwin;
 	getmaxyx(mwin, y, x);
 	int r = file->size > (x*y) ? x*y : file->size;
@@ -58,15 +78,16 @@ print_file(struct editor win, struct file_buffer *file){
 			pos += 2;
 			//when we move to the next line, stop computing length	
 			if (q == 0){
-				ll += p;
-				//wprintw(win.cmdwin, "ll: %d ", win.line_length);
-				//wrefresh(win.cmdwin);
+				win.pos_s->line_length += p;
 			}
 			p = 0;
 		}
-		if ((pos + 2) > x){ 
-			if (q == 0){
-				ll += p;
+		if ((pos + 2) > x){
+			//if not line 1 and no cutoff 
+			if (q == 0 && p != 0){
+				win.pos_s->line_length += p;
+				win.pos_s->last_segment_len = p;
+				win.pos_s->last_x_pos = pos-1;
 			}
 			pos = 0;
 			p = 0;
@@ -74,16 +95,20 @@ print_file(struct editor win, struct file_buffer *file){
 			wmove(mwin, q, 0);
 		}
 	}
+	win.pos_s->fbyte_pos = pos;
+	win.pos_s->last_y_pos = q;
 	wrefresh(win.offsetwin);
 	wrefresh(mwin);
 	wrefresh(win.asciiwin);
-	return ll;
+	return;
 }
 
-void input_loop(struct editor win, struct file_buffer* currfile){
+void
+input_loop(struct editor win, struct file_buffer* currfile){
 	WINDOW *activewin = win.mainwin;
-	int xmax, ymax;
-	getmaxyx(activewin, ymax, xmax);
+	WINDOW *passivewin = win.asciiwin;
+	int xmax = win.pos_s->last_x_pos,
+		ymax = win.pos_s->last_y_pos;
 	int xpos = 0, ypos = 0, key;
 	int oldx, oldy;
 	int space = 0;
@@ -94,11 +119,9 @@ void input_loop(struct editor win, struct file_buffer* currfile){
 		oldy=ypos;
 		switch(key){
 			case KEY_RIGHT:
-				space++;
 				xpos++;
 				goto move;
 			case KEY_LEFT:
-				space--;
 				xpos--;
 				goto move;
 			case KEY_UP:
@@ -107,44 +130,57 @@ void input_loop(struct editor win, struct file_buffer* currfile){
 			case KEY_DOWN:
 				ypos++;
 				goto move;
-			break;
+			case KEY_HOME:
+				xpos = 0;
+				space = 0;
+				goto move;
+			case KEY_END:
+				xpos = xmax;
+//				space = (win.pos_s->last_segment_len*2)-1;
+				goto move;
+			case '\t':
+				//TODO its broken
+				if (activewin == win.mainwin){
+					activewin = win.asciiwin;
+					//account for the spaces in our position mapping
+					xpos = (xpos+(xpos/10))/2;
+				} else {
+					activewin = win.mainwin;
+					xpos = (xpos*2)-(xpos/4);
+				}
+				break;
 			//TODO switch to asciiwin on tab
 			case 'q':
 				return;
 		}
 move:
-		//TODO this is broken aaaaaaaaah
+		//skip the spacing in the main window
+		if (activewin == win.mainwin &&
+			(xpos % 10) > 7){
+			if (oldx < xpos)
+				xpos += 2;
+			else xpos -= 2;
+		} 
 		if (xpos > xmax || xpos < 0){
 			if (xpos > xmax){
-				xpos = 0;
 				if (ypos != ymax){
-					space = 0;
 					ypos++;
+					xpos = 0;
+				}
+				else {
+					xpos = oldx; 
 				}
 			}
 			else if (xpos < 0){
 				xpos = xmax;
 				if (ypos != 0)
-					space = 7;
 					ypos--;
 			}
-			//figure out which bound was violated
-			//TODO want to hop to the next line if available
-			/*xpos = xpos > xmax ? xmax
-			: xpos < 0 ? 0
-			: xpos;
-			ypos = ypos > ymax ? ymax
-			: ypos < 0 ? 0
-			: ypos;*/
-		}
-		else if (space > 7 || space < 0){
-			if (space > 7){ space = 0; xpos += 2; }
-			else {space = 7; xpos -=2;}
 		}
 		wmove(activewin, ypos, xpos);
 		wmove(win.cmdwin, 0, 0);
-		wprintw(win.cmdwin, "linelen: %d pos: %d, %d bounds: %d, %d",
-			win.line_length, xpos, ypos, xmax, ymax);
+		wprintw(win.cmdwin, "linelen: %d lastseglen: %d fbpos: %d lastxpos: %d  pos: %d, %d bounds: %d, %d LINES: %d COLS: %d      ",
+			win.pos_s->line_length, win.pos_s->last_segment_len, win.pos_s->fbyte_pos, win.pos_s->last_x_pos, xpos, ypos, xmax, ymax, LINES, COLS);
 		//dont care about this if we violated a bound
 /*		else {
 			if (currfile->buf[xpos*+(ymax*ypos)] == ' '){
@@ -171,6 +207,7 @@ move:
 				}
 			}
 		}*/
+end:
 		wrefresh(win.cmdwin);
 		wrefresh(activewin);
 	}

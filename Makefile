@@ -5,4 +5,4 @@ files:	files.c
 gui:	gui.c
 	gcc-7 -lncurses gui.c -o gui.o -c
 clean:
-	rm *.o
+	rm *.o clihex
