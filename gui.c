@@ -2,6 +2,8 @@
 #define LOCAL_GUI_HEADER 1
 #include "gui.h"
 #endif
+
+#include <signal.h>
 void
 init_editor_struct_byref(struct editor *win){
 	//we print in sets of 8 bytes + 2 spaces in main window
@@ -17,10 +19,8 @@ init_editor_struct_byref(struct editor *win){
 	// 			 = 3x
 	// remainder/3 = x
 	int left = (pspace%14)/3;
-	win->mainwin = newwin(LINES-1, (scalar*10)+(left*2), 0, 8);
-	win->asciiwin = newwin(LINES-1, scalar*4+left+1, 0, 1+8+(scalar*10)+(left*2));
-//	win->mainwin = newwin(LINES-1, (COLS-8)*3/4, 0, 8);
-//	win->asciiwin = newwin(LINES-1, ((COLS-8)*1/4), 0, ((COLS-8)*3/4)+8);	
+	win->mainwin = newwin(LINES-1, (scalar*10)+(left*2)-2, 0, 8);
+	win->asciiwin = newwin(LINES-1, scalar*4+left-1, 0, 8+(scalar*10)+(left*2));
 	win->offsetwin = newwin(LINES-1, 8, 0, 0);
 	win->cmdwin = newwin(1, COLS, LINES-1, 0);
 	win->pos_s = malloc(sizeof(struct positions));
@@ -53,52 +53,46 @@ editor_entry(char *filename){
 void
 print_file(struct editor win, struct file_buffer *file){
 	int x, y;
-	WINDOW *mwin = win.mainwin;
-	getmaxyx(mwin, y, x);
+	getmaxyx(win.asciiwin, y, x);
+	//TODO check this
+	//off by one...?
 	int r = file->size > (x*y) ? x*y : file->size;
 	fread(file->buf, 1, file->size, file->file);
-	int c, l=1,q=0, pos = 0, p=0;
-	wmove(mwin, 0, 0);
+	int c=0, d,q=0, pos = 0, p=0, l=1;
+	wmove(win.asciiwin, 0, 0);
 	wmove(win.offsetwin, 0, 0);
 	wmove(win.asciiwin, 0, 0);
-	for (c = 0; c < r; c++){
-		if (pos == 0){
-			wprintw(win.offsetwin, "%7x ", c);
-			wmove(win.offsetwin, l, 0);
-			l++;
-		}
-
-		wprintw(mwin, "%02x", file->buf[c]);
-		wprintw(win.asciiwin, "%c", 
-			file->buf[c] < 32 || file->buf[c] == 127 ? '.' : file->buf[c]);
-		p++;
-		pos += 2;
-		if (p == 4){
-			wprintw(mwin, "  ");
-			pos += 2;
-			//when we move to the next line, stop computing length	
-			if (q == 0){
-				win.pos_s->line_length += p;
+	int num = 0;	
+	for (d = 0;
+		(d < y) && d*x < r;
+		 d++){
+		wmove(win.offsetwin, d, 0);
+		wprintw(win.offsetwin, "%7x", d*x);
+		wmove(win.asciiwin, d, 0);
+		wmove(win.mainwin, d, 0);
+		for(c = 0; 
+			c < x && d*x+c < r;
+		c++){
+			wprintw(win.mainwin, "%02x", file->buf[d*x+c] & 0xFF);
+			wprintw(win.asciiwin, "%c", file->buf[d*x+c] < 32
+										  || file->buf[d*x+c] == 127 ?
+										  '.' : file->buf[d*x+c]
+			);
+			num++;
+			if (num == 4){
+				wprintw(win.mainwin, "  ");
+				num = 0;
 			}
-			p = 0;
 		}
-		if ((pos + 2) > x){
-			//if not line 1 and no cutoff 
-			if (q == 0 && p != 0){
-				win.pos_s->line_length += p;
-				win.pos_s->last_segment_len = p;
-				win.pos_s->last_x_pos = pos-1;
-			}
-			pos = 0;
-			p = 0;
-			q++;
-			wmove(mwin, q, 0);
-		}
+		num = 0;
 	}
-	win.pos_s->fbyte_pos = pos;
-	win.pos_s->last_y_pos = q;
+	win.pos_s->last_y_pos = d;
+	c = ATOM(c-1);
+	if ((c%2) == 1){ c--; }
+	c++;
+	win.pos_s->last_x_pos = c;
 	wrefresh(win.offsetwin);
-	wrefresh(mwin);
+	wrefresh(win.mainwin);
 	wrefresh(win.asciiwin);
 	return;
 }
@@ -107,11 +101,19 @@ void
 input_loop(struct editor win, struct file_buffer* currfile){
 	WINDOW *activewin = win.mainwin;
 	WINDOW *passivewin = win.asciiwin;
-	int xmax = win.pos_s->last_x_pos,
-		ymax = win.pos_s->last_y_pos;
+	int finalx = win.pos_s->last_x_pos;
+	int xmax,ymax = win.pos_s->last_y_pos;
+	//TODO off by one
+	ymax--;
+	xmax = getmaxx(activewin);
+
+	//TODO again, off by one?
+	xmax--;
+	wmove(activewin, 0, 0);
+	wrefresh(activewin);
+	
 	int xpos = 0, ypos = 0, key;
 	int oldx, oldy;
-	int space = 0;
 //	mvwchgat(activewin, ypos, xpos, 2, A_STANDOUT, 0, NULL);
 	while(true){
 		key = wgetch(activewin);
@@ -120,94 +122,83 @@ input_loop(struct editor win, struct file_buffer* currfile){
 		switch(key){
 			case KEY_RIGHT:
 				xpos++;
-				goto move;
+				break;
 			case KEY_LEFT:
 				xpos--;
-				goto move;
+				break;
 			case KEY_UP:
 				ypos--;
-				goto move;
+				break;
 			case KEY_DOWN:
 				ypos++;
-				goto move;
+				break;
 			case KEY_HOME:
 				xpos = 0;
-				space = 0;
-				goto move;
+				break;
 			case KEY_END:
 				xpos = xmax;
-//				space = (win.pos_s->last_segment_len*2)-1;
-				goto move;
+				break;
 			case '\t':
-				//TODO its broken
 				if (activewin == win.mainwin){
 					activewin = win.asciiwin;
 					//account for the spaces in our position mapping
-					xpos = (xpos+(xpos/10))/2;
+					xpos = MTOA(xpos);
+					//update maxim
+					xmax = MTOA(xmax);
+					finalx = MTOA(finalx);
 				} else {
 					activewin = win.mainwin;
-					xpos = (xpos*2)-(xpos/4);
+					//simply inverse of above
+					xpos = ATOM(xpos);
+					//TODO mapping aint perfect, fix
+					if ((xpos %2) == 1){xpos--;}
+					xmax = ATOM(xmax);
+					finalx = ATOM(finalx);
+					if ((finalx%2)==0)
+						finalx++;
 				}
 				break;
-			//TODO switch to asciiwin on tab
 			case 'q':
 				return;
 		}
-move:
 		//skip the spacing in the main window
-		if (activewin == win.mainwin &&
-			(xpos % 10) > 7){
+		if (activewin == win.mainwin
+			&& SPACE_CHECK_BOOL(xpos)){
 			if (oldx < xpos)
 				xpos += 2;
 			else xpos -= 2;
-		} 
-		if (xpos > xmax || xpos < 0){
-			if (xpos > xmax){
-				if (ypos != ymax){
-					ypos++;
-					xpos = 0;
-				}
-				else {
-					xpos = oldx; 
-				}
+		}
+		
+		if (xpos > xmax){
+			if (ypos != ymax){
+				ypos++;
+				xpos = 0;
 			}
-			else if (xpos < 0){
+			else {
+				xpos = oldx; 
+			}
+		}
+		else if (xpos < 0){
+			if (ypos != 0){
+				ypos--;
 				xpos = xmax;
-				if (ypos != 0)
-					ypos--;
-			}
+			} else { xpos = 0; }
+		}
+		if (ypos == ymax
+			&& xpos > finalx){
+			if (key == KEY_END)
+				xpos = finalx;
+			else if (oldx > finalx) 
+				xpos = finalx;
+			else xpos = oldx;
+		}
+		else if (ypos > ymax || ypos < 0){
+			ypos = oldy;
 		}
 		wmove(activewin, ypos, xpos);
 		wmove(win.cmdwin, 0, 0);
 		wprintw(win.cmdwin, "linelen: %d lastseglen: %d fbpos: %d lastxpos: %d  pos: %d, %d bounds: %d, %d LINES: %d COLS: %d      ",
-			win.pos_s->line_length, win.pos_s->last_segment_len, win.pos_s->fbyte_pos, win.pos_s->last_x_pos, xpos, ypos, xmax, ymax, LINES, COLS);
-		//dont care about this if we violated a bound
-/*		else {
-			if (currfile->buf[xpos*+(ymax*ypos)] == ' '){
-				//can't encounter a spacer vertically
-				xpos = xpos > oldx ? xpos + 2 : xpos - 2;
-			}
-			if (xpos % 2 == 0){
-				if (oldy == ypos)
-					mvwchgat(activewin, oldy, oldx-1, 2, A_NORMAL, 0, NULL);
-				else
-					mvwchgat(activewin, oldy, oldx, 2, A_NORMAL, 0, NULL);
-				mvwchgat(activewin, ypos, xpos, 2, A_STANDOUT, 0, NULL);
-			}
-			else{
-				if (oldy == ypos){
-					mvwchgat(activewin, oldy, oldx, 2, A_NORMAL, 0, NULL);
-					mvwchgat(activewin, ypos, xpos-1, 2, A_STANDOUT, 0, NULL);
-					wmove(activewin, ypos, xpos);
-				}
-				else{ 
-					mvwchgat(activewin, oldy, oldx-1, 2, A_NORMAL, 0, NULL);
-					mvwchgat(activewin, ypos, xpos-1, 2, A_STANDOUT, 0, NULL);
-					wmove(activewin, ypos, xpos);
-				}
-			}
-		}*/
-end:
+			win.pos_s->line_length, win.pos_s->last_segment_len, win.pos_s->fbyte_pos, finalx, xpos, ypos, xmax, ymax, LINES, COLS);
 		wrefresh(win.cmdwin);
 		wrefresh(activewin);
 	}

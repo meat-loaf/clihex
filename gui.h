@@ -14,6 +14,11 @@
 #define _LOCAL_LIB_NCURSES_DEF 1
 #include <curses.h>
 #endif
+
+#define MTOA(X) (((X)/2)-((X)/10))
+#define ATOM(X) (((X)*10)/4)
+#define SPACE_CHECK_BOOL(X) (((X)%10)>7)
+
 //TODO these can probably be smaller than int (short?)
 struct positions {
 	//number of bytes printed per line
