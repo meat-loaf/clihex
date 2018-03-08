@@ -33,3 +33,6 @@ void dealloc_file_buff(struct file_buffer* fb){
 		return;
 }
 
+int set_file_pos_from_start(struct file_buffer *fb, long pos){
+	return fseek(fb->file, pos, SEEK_SET);
+}

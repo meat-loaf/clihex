@@ -27,6 +27,8 @@ init_editor_struct_byref(struct editor *win){
 	win->pos_s->line_length = 0;
 	win->pos_s->last_segment_len = 0;
 	win->pos_s->fbyte_pos = 0;
+	win->pos_s->printed_chars = 0;
+	win->pos_s->lines_into_file = 0;
 	return;
 }
 void 
@@ -44,34 +46,43 @@ editor_entry(char *filename){
 	wrefresh(win.offsetwin);
 	
 	struct file_buffer *f = alloc_file_buff(filename);
-	print_file(win, f);
+	print_file(win, f, 0);
 	input_loop(win, f);
 	//TODO if we're here we should probably clean up malloc'd stuff
 	//before returning and exiting
 	return;
 }
+//dump the contents of the file's buffer (starting from print_start_pos relative
+//to beginning of file) to the screen. Accounts for ending of file and such.
 void
-print_file(struct editor win, struct file_buffer *file){
-	int x, y;
+print_file(struct editor win, struct file_buffer *file, int print_start_pos){
+	win.file_top_pos = print_start_pos;
+	int x, y, c, d;
+	int num = 0;
 	getmaxyx(win.asciiwin, y, x);
-	//TODO check this
-	//off by one...?
-	int r = file->size > (x*y) ? x*y : file->size;
+	win.pos_s->line_length = x;
+	//check if the (rest of the) file is larger than the terminal window...
+	//TODO doesn't work when scrolling
+	int toprint = (file->size)-(print_start_pos) > (x*y) ?
+					 x*y : (file->size)-(print_start_pos);
+	win.pos_s->printed_chars = toprint;
+	//seek to the position provided
+	//TODO error handling on -1 return val
+	fseek(file->file, print_start_pos, SEEK_SET);
+	//TODO error handling
 	fread(file->buf, 1, file->size, file->file);
-	int c=0, d,q=0, pos = 0, p=0, l=1;
 	wmove(win.asciiwin, 0, 0);
 	wmove(win.offsetwin, 0, 0);
 	wmove(win.asciiwin, 0, 0);
-	int num = 0;	
 	for (d = 0;
-		(d < y) && d*x < r;
+		d*x < toprint;
 		 d++){
 		wmove(win.offsetwin, d, 0);
-		wprintw(win.offsetwin, "%7x", d*x);
+		wprintw(win.offsetwin, "%7x", (d*x)+print_start_pos);
 		wmove(win.asciiwin, d, 0);
 		wmove(win.mainwin, d, 0);
 		for(c = 0; 
-			c < x && d*x+c < r;
+			d*x+c < toprint;
 		c++){
 			wprintw(win.mainwin, "%02x", file->buf[d*x+c] & 0xFF);
 			wprintw(win.asciiwin, "%c", file->buf[d*x+c] < 32
@@ -86,6 +97,8 @@ print_file(struct editor win, struct file_buffer *file){
 		}
 		num = 0;
 	}
+	wprintw(win.mainwin, "%*c", ATOM(x-c), ' ');
+	wprintw(win.asciiwin, "%*c", x-c, ' ');
 	win.pos_s->last_y_pos = d;
 	c = ATOM(c-1);
 	if ((c%2) == 1){ c--; }
@@ -101,6 +114,7 @@ void
 input_loop(struct editor win, struct file_buffer* currfile){
 	WINDOW *activewin = win.mainwin;
 	WINDOW *passivewin = win.asciiwin;
+	//TODO update these properly on screen scroll
 	int finalx = win.pos_s->last_x_pos;
 	int xmax,ymax = win.pos_s->last_y_pos;
 	//TODO off by one
@@ -192,13 +206,29 @@ input_loop(struct editor win, struct file_buffer* currfile){
 				xpos = finalx;
 			else xpos = oldx;
 		}
-		else if (ypos > ymax || ypos < 0){
+		else if (ypos < 0){
+			if (win.pos_s->lines_into_file != 0){
+				print_file(win, currfile, 
+					GET_NEXT_FILE_OFFSET(win)
+				);
+					win.pos_s->lines_into_file--;
+
+			}
+			ypos = oldy;
+		}
+		else if (ypos > ymax){
+			if (win.pos_s->printed_chars != currfile->size){
+				print_file(win, currfile, 
+					GET_NEXT_FILE_OFFSET(win)
+				);
+				win.pos_s->lines_into_file++;
+			}
 			ypos = oldy;
 		}
 		wmove(activewin, ypos, xpos);
 		wmove(win.cmdwin, 0, 0);
-		wprintw(win.cmdwin, "linelen: %d lastseglen: %d fbpos: %d lastxpos: %d  pos: %d, %d bounds: %d, %d LINES: %d COLS: %d      ",
-			win.pos_s->line_length, win.pos_s->last_segment_len, win.pos_s->fbyte_pos, finalx, xpos, ypos, xmax, ymax, LINES, COLS);
+		wprintw(win.cmdwin, "lastseglen: %d fbpos: %d  pos: %d, %d bounds: %d, %d LINES: %d COLS: %d      ",
+			  win.pos_s->last_segment_len, win.pos_s->fbyte_pos, finalx, xpos, ypos, xmax, ymax, LINES, COLS);
 		wrefresh(win.cmdwin);
 		wrefresh(activewin);
 	}
