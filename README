@@ -1,0 +1,5 @@
+clihex is an ncurses-based command line hex editor.
+It (will, when completed) have vim-like commands for editing and navigating.
+
+Building works on linux with gcc and OSX with clang so far.
+ncurses-dev libraries are the only dependency.
