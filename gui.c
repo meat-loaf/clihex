@@ -21,6 +21,8 @@ init_editor_struct_byref(struct editor *win){
 	int left = (pspace%14)/3;
 	win->mainwin = newwin(LINES-1, (scalar*10)+(left*2)-2, 0, 8);
 	win->asciiwin = newwin(LINES-1, scalar*4+left-1, 0, 8+(scalar*10)+(left*2));
+	//TODO this needs to be more dynamic...can make it smaller
+	//based on filesize
 	win->offsetwin = newwin(LINES-1, 8, 0, 0);
 	win->cmdwin = newwin(1, COLS, LINES-1, 0);
 	win->pos_s = malloc(sizeof(struct positions));
@@ -29,6 +31,7 @@ init_editor_struct_byref(struct editor *win){
 	win->pos_s->fbyte_pos = 0;
 	win->pos_s->printed_chars = 0;
 	win->pos_s->lines_into_file = 0;
+	win->pos_s->at_end = 0;
 	return;
 }
 void 
@@ -53,18 +56,20 @@ editor_entry(char *filename){
 	return;
 }
 //dump the contents of the file's buffer (starting from print_start_pos relative
-//to beginning of file) to the screen. Accounts for ending of file and such.
+//to beginning of file) to the screen. updates 'positions' struct with important
+//information relating to where we are in the file
 void
 print_file(struct editor win, struct file_buffer *file, int print_start_pos){
-	win.file_top_pos = print_start_pos;
 	int x, y, c, d;
 	int num = 0;
+	win.pos_s->at_beginning = !print_start_pos;
 	getmaxyx(win.asciiwin, y, x);
 	win.pos_s->line_length = x;
 	//check if the (rest of the) file is larger than the terminal window...
 	//TODO doesn't work when scrolling
 	int toprint = (file->size)-(print_start_pos) > (x*y) ?
 					 x*y : (file->size)-(print_start_pos);
+	win.pos_s->at_end = toprint < x*y? 1 : 0;
 	win.pos_s->printed_chars = toprint;
 	//seek to the position provided
 	//TODO error handling on -1 return val
@@ -74,16 +79,12 @@ print_file(struct editor win, struct file_buffer *file, int print_start_pos){
 	wmove(win.asciiwin, 0, 0);
 	wmove(win.offsetwin, 0, 0);
 	wmove(win.asciiwin, 0, 0);
-	for (d = 0;
-		d*x < toprint;
-		 d++){
+	for (d = 0; d*x < toprint; d++){
 		wmove(win.offsetwin, d, 0);
 		wprintw(win.offsetwin, "%7x", (d*x)+print_start_pos);
 		wmove(win.asciiwin, d, 0);
 		wmove(win.mainwin, d, 0);
-		for(c = 0; 
-			d*x+c < toprint;
-		c++){
+		for(c = 0; d*x+c < toprint; c++){
 			wprintw(win.mainwin, "%02x", file->buf[d*x+c] & 0xFF);
 			wprintw(win.asciiwin, "%c", file->buf[d*x+c] < 32
 										  || file->buf[d*x+c] == 127 ?
@@ -97,8 +98,10 @@ print_file(struct editor win, struct file_buffer *file, int print_start_pos){
 		}
 		num = 0;
 	}
-	wprintw(win.mainwin, "%*c", ATOM(x-c), ' ');
-	wprintw(win.asciiwin, "%*c", x-c, ' ');
+	if (win.pos_s->at_end){
+		wprintw(win.mainwin, "%*c", ATOM(x-c), ' ');
+		wprintw(win.asciiwin, "%*c", x-c, ' ');
+	}
 	win.pos_s->last_y_pos = d;
 	c = ATOM(c-1);
 	if ((c%2) == 1){ c--; }
@@ -115,7 +118,6 @@ input_loop(struct editor win, struct file_buffer* currfile){
 	WINDOW *activewin = win.mainwin;
 	WINDOW *passivewin = win.asciiwin;
 	//TODO update these properly on screen scroll
-	int finalx = win.pos_s->last_x_pos;
 	int xmax,ymax = win.pos_s->last_y_pos;
 	//TODO off by one
 	ymax--;
@@ -130,6 +132,7 @@ input_loop(struct editor win, struct file_buffer* currfile){
 	int oldx, oldy;
 //	mvwchgat(activewin, ypos, xpos, 2, A_STANDOUT, 0, NULL);
 	while(true){
+		int finalx = win.pos_s->last_x_pos;
 		key = wgetch(activewin);
 		oldx=xpos;
 		oldy=ypos;
@@ -184,20 +187,20 @@ input_loop(struct editor win, struct file_buffer* currfile){
 		}
 		
 		if (xpos > xmax){
-			if (ypos != ymax){
+			if (ypos != ymax || !win.pos_s->at_end){
 				ypos++;
 				xpos = 0;
-			}
-			else {
+			} else {
 				xpos = oldx; 
 			}
 		}
 		else if (xpos < 0){
-			if (ypos != 0){
+			if (ypos != 0 || !win.pos_s->at_beginning){
 				ypos--;
 				xpos = xmax;
 			} else { xpos = 0; }
 		}
+		//TODO check logic for scrolling
 		if (ypos == ymax
 			&& xpos > finalx){
 			if (key == KEY_END)
@@ -205,30 +208,32 @@ input_loop(struct editor win, struct file_buffer* currfile){
 			else if (oldx > finalx) 
 				xpos = finalx;
 			else xpos = oldx;
-		}
-		else if (ypos < 0){
+		} else if (ypos < 0){
 			if (win.pos_s->lines_into_file != 0){
+				win.pos_s->lines_into_file--;
 				print_file(win, currfile, 
 					GET_NEXT_FILE_OFFSET(win)
 				);
-					win.pos_s->lines_into_file--;
 
 			}
 			ypos = oldy;
-		}
-		else if (ypos > ymax){
+		} else if (ypos > ymax && !win.pos_s->at_end){
 			if (win.pos_s->printed_chars != currfile->size){
+				win.pos_s->lines_into_file++;
 				print_file(win, currfile, 
 					GET_NEXT_FILE_OFFSET(win)
 				);
-				win.pos_s->lines_into_file++;
 			}
+			finalx = win.pos_s->last_x_pos;
+			ypos = oldy;
+			if (xpos > finalx) xpos = finalx;
+		} else if (ypos > ymax && win.pos_s->at_end){
 			ypos = oldy;
 		}
 		wmove(activewin, ypos, xpos);
 		wmove(win.cmdwin, 0, 0);
-		wprintw(win.cmdwin, "lastseglen: %d fbpos: %d  pos: %d, %d bounds: %d, %d LINES: %d COLS: %d      ",
-			  win.pos_s->last_segment_len, win.pos_s->fbyte_pos, finalx, xpos, ypos, xmax, ymax, LINES, COLS);
+		wprintw(win.cmdwin, "printed_chars: %d, lastseglen: %d fbpos: %d  finalx: %d, pos: %d, %d bounds: %d, %d LINES: %d COLS: %d at_end: %s at_beginning: %s     ",
+			  win.pos_s->printed_chars, win.pos_s->last_segment_len, win.pos_s->fbyte_pos, finalx, xpos, ypos, xmax, ymax, LINES, COLS, win.pos_s->at_end ? "true" : "false", win.pos_s->at_beginning? "true" : "false");
 		wrefresh(win.cmdwin);
 		wrefresh(activewin);
 	}

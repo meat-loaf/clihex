@@ -34,6 +34,8 @@ struct positions {
 	//position in last line of final byte
 	//(relative to window printing)
 	int fbyte_pos;
+	int at_end;
+	int at_beginning;
 };
 //TODO could use some dealloc functions
 struct editor {
@@ -42,7 +44,6 @@ struct editor {
 	WINDOW *offsetwin;
 	WINDOW *cmdwin;
 	struct positions *pos_s;
-	int file_top_pos;
 };
 
 void init_editor_struct_byref(struct editor *);
