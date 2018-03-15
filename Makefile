@@ -1,4 +1,4 @@
-clihex:	files gui
+clihex:	files.o gui.o
 	gcc -lncurses main.c -o clihex files.o gui.o
 files:	files.c
 	gcc files.c -o files.o -c 

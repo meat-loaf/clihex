@@ -32,8 +32,7 @@
 
 
 void init_ncurses(){
-	//TODO grab system locale (...?)
-	setlocale(LC_ALL, "en_us.UTF-8");
+	setlocale(LC_ALL, "");
 	initscr();
 	raw();
 	noecho();

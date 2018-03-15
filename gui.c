@@ -1,14 +1,27 @@
+//STDLIB Includes
+#include <signal.h>
+
+//Local File Includes
 #ifndef LOCAL_GUI_HEADER
-#define LOCAL_GUI_HEADER 1
+#define LOCAL_GUI_HEADER
 #include "gui.h"
 #endif
+#ifndef LOCAL_EDIT_HEADER
+#define LOCAL_EDIT_HEADER
+#include "edit.h"
+#endif
 
-#include <signal.h>
+//TODO make drawing 
+static int winch_refresh_scr = 0;
+void winch_handler(int sig){
+	winch_refresh_scr = 1;	
+}
+
 void
 init_editor_struct_byref(struct editor *win){
-	//we print in sets of 8 bytes + 2 spaces in main window
-	//ascii win is just raw
-	//so 10 characters in mainwin equals 4 bytes in asciiwin
+	//we print in sets of 8 chars + 2 spaces in main win
+	//ascii win is just raw data
+	//so 10 chars in mainwin equals 4 chars in asciiwin
 	//(COLS-8) = 10x+4x
 	//		   = 14x
 	//(COLS-8)/14) = x
@@ -28,7 +41,6 @@ init_editor_struct_byref(struct editor *win){
 	win->pos_s = malloc(sizeof(struct positions));
 	win->pos_s->line_length = 0;
 	win->pos_s->last_segment_len = 0;
-	win->pos_s->fbyte_pos = 0;
 	win->pos_s->printed_chars = 0;
 	win->pos_s->lines_into_file = 0;
 	win->pos_s->at_end = 0;
@@ -36,7 +48,10 @@ init_editor_struct_byref(struct editor *win){
 }
 void 
 editor_entry(char *filename){
+	init_edits();
 	struct editor win;
+	//TODO want input handling on separate thread for this to work
+	signal(SIGWINCH, winch_handler);
 	init_editor_struct_byref(&win);
 	curs_set(1);
 	keypad(win.mainwin, TRUE);
@@ -49,10 +64,15 @@ editor_entry(char *filename){
 	wrefresh(win.offsetwin);
 	
 	struct file_buffer *f = alloc_file_buff(filename);
+	//couldn't open file
+	if (!f) return;
+	//TODO win should be passed as pointer
 	print_file(win, f, 0);
 	input_loop(win, f);
-	//TODO if we're here we should probably clean up malloc'd stuff
-	//before returning and exiting
+	//cleanup on exit
+	full_dealloc_file_buff(f);
+	if (win.pos_s)
+		free(win.pos_s);
 	return;
 }
 //dump the contents of the file's buffer (starting from print_start_pos relative
@@ -65,16 +85,14 @@ print_file(struct editor win, struct file_buffer *file, int print_start_pos){
 	win.pos_s->at_beginning = !print_start_pos;
 	getmaxyx(win.asciiwin, y, x);
 	win.pos_s->line_length = x;
-	//check if the (rest of the) file is larger than the terminal window...
-	//TODO doesn't work when scrolling
 	int toprint = (file->size)-(print_start_pos) > (x*y) ?
 					 x*y : (file->size)-(print_start_pos);
 	win.pos_s->at_end = toprint < x*y? 1 : 0;
 	win.pos_s->printed_chars = toprint;
 	//seek to the position provided
-	//TODO error handling on -1 return val
+	//TODO error handling on -1 return val (file becomes invalid?)
 	fseek(file->file, print_start_pos, SEEK_SET);
-	//TODO error handling
+	//TODO error handling...
 	fread(file->buf, 1, file->size, file->file);
 	wmove(win.asciiwin, 0, 0);
 	wmove(win.offsetwin, 0, 0);
@@ -177,6 +195,10 @@ input_loop(struct editor win, struct file_buffer* currfile){
 				break;
 			case 'q':
 				return;
+			default:
+				handle_general(key, win, currfile, 
+					activewin == win.mainwin? 0 : 1);
+				break;
 		}
 		//skip the spacing in the main window
 		if (activewin == win.mainwin
@@ -231,10 +253,8 @@ input_loop(struct editor win, struct file_buffer* currfile){
 			ypos = oldy;
 		}
 		wmove(activewin, ypos, xpos);
-		wmove(win.cmdwin, 0, 0);
-		wprintw(win.cmdwin, "printed_chars: %d, lastseglen: %d fbpos: %d  finalx: %d, pos: %d, %d bounds: %d, %d LINES: %d COLS: %d at_end: %s at_beginning: %s     ",
-			  win.pos_s->printed_chars, win.pos_s->last_segment_len, win.pos_s->fbyte_pos, finalx, xpos, ypos, xmax, ymax, LINES, COLS, win.pos_s->at_end ? "true" : "false", win.pos_s->at_beginning? "true" : "false");
-		wrefresh(win.cmdwin);
+//		wmove(win.cmdwin, 0, 0);
+//		wrefresh(win.cmdwin);
 		wrefresh(activewin);
 	}
 }

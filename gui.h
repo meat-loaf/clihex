@@ -19,12 +19,17 @@
 #define ATOM(X) (((X)*10)/4)
 #define SPACE_CHECK_BOOL(X) (((X)%10)>7)
 #define GET_NEXT_FILE_OFFSET(WIN) ((WIN.pos_s->line_length)*(WIN.pos_s->lines_into_file))
+//TODO clean me up...
 struct positions {
+	//number of bytes we actually printed on the screen
+	//good to know when file is smaller than screen
 	int printed_chars;
 	//number of bytes printed per line
 	int line_length;
-	//number of bytes in last 'segment'
+	//how many 'lines deep' we are into the file (line being
+	//a line on the screen
 	int lines_into_file;
+	//number of bytes in last 'segment', if applicable
 	int last_segment_len;
 	//position in window of last nibble
 	int last_x_pos;
@@ -33,7 +38,6 @@ struct positions {
 	int last_y_pos;
 	//position in last line of final byte
 	//(relative to window printing)
-	int fbyte_pos;
 	int at_end;
 	int at_beginning;
 };
