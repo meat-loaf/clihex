@@ -6,9 +6,13 @@
 #define LOCAL_GUI_HEADER
 #include "gui.h"
 #endif
+
 #ifndef LOCAL_EDIT_HEADER
-#define LOCAL_EDIT_HEADER
 #include "edit.h"
+#endif
+
+#ifndef LOCAL_GENERAL_HEADER
+#include "general.h"
 #endif
 
 //TODO make drawing 
@@ -34,8 +38,6 @@ init_editor_struct_byref(struct editor *win){
 	int left = (pspace%14)/3;
 	win->mainwin = newwin(LINES-1, (scalar*10)+(left*2)-2, 0, 8);
 	win->asciiwin = newwin(LINES-1, scalar*4+left-1, 0, 8+(scalar*10)+(left*2));
-	//TODO this needs to be more dynamic...can make it smaller
-	//based on filesize
 	win->offsetwin = newwin(LINES-1, 8, 0, 0);
 	win->cmdwin = newwin(1, COLS, LINES-1, 0);
 	win->pos_s = malloc(sizeof(struct positions));
@@ -48,7 +50,7 @@ init_editor_struct_byref(struct editor *win){
 }
 void 
 editor_entry(char *filename){
-	init_edits();
+	//init_edits();
 	struct editor win;
 	//TODO want input handling on separate thread for this to work
 	signal(SIGWINCH, winch_handler);
@@ -64,6 +66,7 @@ editor_entry(char *filename){
 	wrefresh(win.offsetwin);
 	
 	struct file_buffer *f = alloc_file_buff(filename);
+	init_edits(f);
 	//couldn't open file
 	if (!f) return;
 	//TODO win should be passed as pointer
@@ -103,6 +106,7 @@ print_file(struct editor win, struct file_buffer *file, int print_start_pos){
 		wmove(win.asciiwin, d, 0);
 		wmove(win.mainwin, d, 0);
 		for(c = 0; d*x+c < toprint; c++){
+			//TODO add space here and fix maths
 			wprintw(win.mainwin, "%02x", file->buf[d*x+c] & 0xFF);
 			wprintw(win.asciiwin, "%c", file->buf[d*x+c] < 32
 										  || file->buf[d*x+c] == 127 ?
@@ -148,7 +152,6 @@ input_loop(struct editor win, struct file_buffer* currfile){
 	
 	int xpos = 0, ypos = 0, key;
 	int oldx, oldy;
-//	mvwchgat(activewin, ypos, xpos, 2, A_STANDOUT, 0, NULL);
 	while(true){
 		int finalx = win.pos_s->last_x_pos;
 		key = wgetch(activewin);
@@ -193,12 +196,18 @@ input_loop(struct editor win, struct file_buffer* currfile){
 						finalx++;
 				}
 				break;
-			case 'q':
+			//ESC or ALT
+			case 27:
 				return;
 			default:
-				handle_general(key, win, currfile, 
-					activewin == win.mainwin? 0 : 1);
+				wmove(win.cmdwin, 0, 0);
+				wprintw(win.cmdwin, "calling handle_general with value '%c'", key);
+				wprintw(win.cmdwin, "; returned %d ", handle_general(key, MTOA(xpos)+(MTOA(ypos)*win.pos_s->line_length), currfile,
+					activewin == win.mainwin? 0 : 1));
+				
+				wmove(activewin, ypos, xpos);
 				break;
+
 		}
 		//skip the spacing in the main window
 		if (activewin == win.mainwin
@@ -209,7 +218,7 @@ input_loop(struct editor win, struct file_buffer* currfile){
 		}
 		
 		if (xpos > xmax){
-			if (ypos != ymax || !win.pos_s->at_end){
+			if ((ypos != ymax || !win.pos_s->at_end)){
 				ypos++;
 				xpos = 0;
 			} else {
@@ -252,9 +261,9 @@ input_loop(struct editor win, struct file_buffer* currfile){
 		} else if (ypos > ymax && win.pos_s->at_end){
 			ypos = oldy;
 		}
+		//at the end, we have a valid set of x and y positions
 		wmove(activewin, ypos, xpos);
-//		wmove(win.cmdwin, 0, 0);
-//		wrefresh(win.cmdwin);
+		wrefresh(win.cmdwin);
 		wrefresh(activewin);
 	}
 }

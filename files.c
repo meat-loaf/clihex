@@ -15,12 +15,13 @@ struct file_buffer *alloc_file_buff(char *fn){
 	struct file_buffer *f = malloc(sizeof(struct file_buffer));
 	f->fname = fn;
 	f->file = fopen(fn, "r");
-	if (f->file == NULL){ return NULL; }
-	fseek(f->file, 0L, SEEK_END);
-	f->size = ftell(f->file);
-	//TODO probably an issue with large files
-	f->buf = malloc(f->size);
-	rewind(f->file);
+	if (f->file != NULL){
+		fseek(f->file, 0L, SEEK_END);
+		f->size = ftell(f->file);
+		//TODO probably an issue with large files
+		f->buf = malloc(f->size);
+		rewind(f->file);
+	} else { f->buf = NULL; }
 	return f;
 }
 void full_dealloc_file_buff(struct file_buffer *fb){
@@ -31,7 +32,8 @@ void full_dealloc_file_buff(struct file_buffer *fb){
 }
 
 void dealloc_file_buff(struct file_buffer* fb){
-		fclose(fb->file);
+		if (fb->file != NULL)
+			fclose(fb->file);
 		if (fb->buf != NULL)
 			free(fb->buf);
 		return;

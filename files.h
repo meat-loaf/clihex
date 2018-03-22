@@ -1,9 +1,14 @@
+#define LOCAL_FILES_HEADER 1
+
 #ifndef STDLIB_DEFS
 #define STDLIB_DEFS 1
 #include <locale.h>
 #include <stdlib.h>
 #include <stdio.h>
 #endif
+
+
+
 
 //file buffer  structure
 //fname	-- user-provided filename
@@ -15,6 +20,7 @@ struct file_buffer {
 	char *buf;
 	FILE *file;
 	long size;
+	struct edits *edits;
 };
 //dynamically allocate file buffer structure
 struct file_buffer *alloc_file_buff(char *);

@@ -6,7 +6,6 @@
 #endif
 
 #ifndef LOCAL_FILES_HEADER
-#define LOCAL_FILES_HEADER 1
 #include "files.h"
 #endif
 

@@ -9,12 +9,6 @@
 #include <curses.h>
 #endif
 
-#ifndef LOCAL_FILES_HEADER
-#define LOCAL_FILES_HEADER 1
-#include "files.h"
-#endif
-
-
 #ifndef STDLIB_DEFS
 #define STDLIB_DEFS 1
 #include <locale.h>
