@@ -11,17 +11,19 @@
 
 #define TOLOWER(X) ((X)-(97-65))
 struct edit_entry {
-	char e;
+	//new value
+	char val;
+	//value originally in file
+	char orig;
 	//position in file (i.e. 'asciiwin' position)
 	int pos;
+	struct edit_entry *left, *right;
 };
 //TODO this should probably be a tree;
 //we need to search to see if a certain byte
 //has been changed already...
 struct edits {
-	int size;
-	int maxsize;
-	struct edit_entry *vals;
+	struct edit_entry *root;
 };
 
 int handle_general(char, int, struct file_buffer *, int);

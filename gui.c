@@ -202,9 +202,14 @@ input_loop(struct editor win, struct file_buffer* currfile){
 			default:
 				wmove(win.cmdwin, 0, 0);
 				wprintw(win.cmdwin, "calling handle_general with value '%c'", key);
-				wprintw(win.cmdwin, "; returned %d ", handle_general(key, MTOA(xpos)+(MTOA(ypos)*win.pos_s->line_length), currfile,
-					activewin == win.mainwin? 0 : 1));
-				
+				if (activewin == win.mainwin){
+					wprintw(win.cmdwin, "; returned %d, inserted at position %x ", handle_general(key, MTOA(xpos)+(MTOA(ypos)*win.pos_s->line_length), currfile,
+					activewin == win.mainwin? 0 : 1), MTOA(xpos)+MTOA(ypos)*win.pos_s->line_length);
+				}
+				else {
+					wprintw(win.cmdwin, "; returned %d, inserted at position %x ", handle_general(key, MTOA(xpos)+(MTOA(ypos)*win.pos_s->line_length), currfile,
+					activewin == win.mainwin? 0 : 1), xpos+(ypos*win.pos_s->line_length));
+				}
 				wmove(activewin, ypos, xpos);
 				break;
 
