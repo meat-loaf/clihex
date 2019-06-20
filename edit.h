@@ -23,6 +23,7 @@ struct edit_entry {
 //we need to search to see if a certain byte
 //has been changed already...
 struct edits {
+	unsigned int size;
 	struct edit_entry *root;
 };
 

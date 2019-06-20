@@ -1,5 +1,5 @@
 clihex:	files.o gui.o edit.o
-	gcc -lncurses main.c -o clihex files.o gui.o edit.o
+	gcc main.c -o clihex files.o gui.o edit.o -I/usr/include/ncurses -lncurses
 files:	files.c
 	gcc files.c -o files.o -c 
 gui:	gui.c

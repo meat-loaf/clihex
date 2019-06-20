@@ -12,17 +12,17 @@ static void resize_edits(struct edits *e){
 	NCURSES_EXIT(1);
 }
 
-static struct edit_entry *edit_contains(int pos, struct edits *ed){
+/*static struct edit_entry *edit_contains(int pos, struct edits *ed){
 	int c;
 	for (c = 0; c < ed->size; c++){
 		if (ed->vals[c].pos == pos)
 			return &(ed->vals[c]);
 	}
 	return NULL;
-}
+}*/
 
 void init_edits(struct file_buffer *f){
-	void *mem;
+	struct edits*mem;
 	ALLOCMEM(mem, (sizeof(struct edits)));
 	f->edits = mem;
 	mem->root = NULL;
@@ -34,7 +34,7 @@ void init_edits(struct file_buffer *f){
 };
 
 static void insert_into_edits(char k, char old, int p, struct edits *ed){
-	if (ed->root == NULL){
+	/*if (ed->root == NULL){
 		struct edit_entry *mem;
 		ALLOCMEM(mem, sizeof(struct edit_entry));
 		mem->left = mem->right = NULL;
@@ -49,7 +49,7 @@ static void insert_into_edits(char k, char old, int p, struct edits *ed){
 		}
 		else { ; //insert to left
 		}
-	}
+	}*/
 	return;
 }
 
@@ -65,7 +65,7 @@ int handle_general(char key, int pos, struct file_buffer *f, int which){
 	}
 	//asciiwin -- we entered a byte
 	if (which){
-		insert_into_edits(key, pos, f->buffer[pos], f->edits);
+		insert_into_edits(key, pos, f->buf[pos], f->edits);
 	} else { //we entered a nibble
 	}
 	return -1;
