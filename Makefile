@@ -1,3 +1,5 @@
+default: clihex
+
 clihex:	files.o gui.o edit.o
 	gcc main.c -o clihex files.o gui.o edit.o -I/usr/include/ncurses -lncurses
 files:	files.c

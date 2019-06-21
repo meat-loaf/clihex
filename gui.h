@@ -49,7 +49,15 @@ struct editor {
 	struct positions *pos_s;
 };
 
+struct coord_pair {
+	int x;
+	int y;
+};
+
 void init_editor_struct_byref(struct editor *);
 void editor_entry(char *);
 void input_loop(struct editor, struct file_buffer*);
 void print_file(struct editor, struct file_buffer*, int);
+void move_cursor(WINDOW *, struct editor *, int, int);
+//void ensure_new_position_valid(struct coord_pair *, struct coord_pair *, bool, int);
+void ensure_new_position_valid(struct editor, int *xpos, int *ypos, int oldx, int oldy, bool, int, int, int, char, struct file_buffer *);

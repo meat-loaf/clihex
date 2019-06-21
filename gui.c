@@ -109,8 +109,8 @@ print_file(struct editor win, struct file_buffer *file, int print_start_pos){
 			//TODO add space here and fix maths
 			wprintw(win.mainwin, "%02x", file->buf[d*x+c] & 0xFF);
 			wprintw(win.asciiwin, "%c", file->buf[d*x+c] < 32
-										  || file->buf[d*x+c] == 127 ?
-										  '.' : file->buf[d*x+c]
+				|| file->buf[d*x+c] == 127 ?
+				'.' : file->buf[d*x+c]
 			);
 			num++;
 			if (num == 4){
@@ -174,6 +174,7 @@ input_loop(struct editor win, struct file_buffer* currfile){
 				xpos = 0;
 				break;
 			case KEY_END:
+				//xpos = finalx;
 				xpos = xmax;
 				break;
 			case '\t':
@@ -214,61 +215,15 @@ input_loop(struct editor win, struct file_buffer* currfile){
 				break;
 
 		}
+		ensure_new_position_valid(win,
+			&xpos, &ypos, oldx, oldy,
+			activewin == win.mainwin ? 1 : 0, finalx,
+			xmax, ymax, key, currfile
+		);
 		//skip the spacing in the main window
-		if (activewin == win.mainwin
-			&& SPACE_CHECK_BOOL(xpos)){
-			if (oldx < xpos)
-				xpos += 2;
-			else xpos -= 2;
-		}
-		
-		if (xpos > xmax){
-			if ((ypos != ymax || !win.pos_s->at_end)){
-				ypos++;
-				xpos = 0;
-			} else {
-				xpos = oldx; 
-			}
-		}
-		else if (xpos < 0){
-			if (ypos != 0 || !win.pos_s->at_beginning){
-				ypos--;
-				xpos = xmax;
-			} else { xpos = 0; }
-		}
-		//TODO check logic for scrolling
-		if (ypos == ymax
-			&& xpos > finalx){
-			if (key == KEY_END)
-				xpos = finalx;
-			else if (oldx > finalx) 
-				xpos = finalx;
-			else xpos = oldx;
-		} else if (ypos < 0){
-			if (win.pos_s->lines_into_file != 0){
-				win.pos_s->lines_into_file--;
-				print_file(win, currfile, 
-					GET_NEXT_FILE_OFFSET(win)
-				);
-
-			}
-			ypos = oldy;
-		} else if (ypos > ymax && !win.pos_s->at_end){
-			if (win.pos_s->printed_chars != currfile->size){
-				win.pos_s->lines_into_file++;
-				print_file(win, currfile, 
-					GET_NEXT_FILE_OFFSET(win)
-				);
-			}
-			finalx = win.pos_s->last_x_pos;
-			ypos = oldy;
-			if (xpos > finalx) xpos = finalx;
-		} else if (ypos > ymax && win.pos_s->at_end){
-			ypos = oldy;
-		}
-		//at the end, we have a valid set of x and y positions
 		wmove(activewin, ypos, xpos);
-		if (activewin == win.mainwin){
+		//TODO finish highlighting logic
+		/*if (activewin == win.mainwin){
 			unsigned int moved = 0;
 			if (xpos & 1){
 				moved = 1;
@@ -291,9 +246,77 @@ input_loop(struct editor win, struct file_buffer* currfile){
 		}
 		else if (activewin == win.asciiwin){
 			wchgat(win.mainwin, 2, A_REVERSE, ATOM(xpos), NULL);
-		}
+		}*/
 		wrefresh(win.cmdwin);
-		wrefresh(activewin == win.mainwin ? win.asciiwin : win.mainwin);
+		//wrefresh(activewin == win.mainwin ? win.asciiwin : win.mainwin);
 		wrefresh(activewin);
 	}
 }
+
+//TODO should return a coord_pair with valid new positions instead
+void
+ensure_new_position_valid(
+	struct editor win,
+	int* xpos, int* ypos,
+	int oldx, int oldy,
+	bool skipspace, int finalx,
+	int xmax, int ymax, char key, struct file_buffer *currfile){
+	if (skipspace && SPACE_CHECK_BOOL(*xpos)){
+		if (oldx < *xpos)
+			*xpos += 2;
+		else *xpos -= 2;
+	}
+
+	if (*xpos > xmax){
+		if ((*ypos != ymax || !win.pos_s->at_end)){
+			*ypos++;
+			*xpos = 0;
+		} else {
+			*xpos = oldx; 
+		}
+	}
+	else if (*xpos < 0){
+		if (*ypos != 0 || !win.pos_s->at_beginning){
+			*ypos--;
+			*xpos = xmax;
+		} else { *xpos = 0; }
+	}
+	//TODO check logic for scrolling
+	if (*ypos == ymax
+		&& *xpos > finalx){
+		if (key == KEY_END)
+			*xpos = finalx;
+		else if (oldx > finalx) 
+			*xpos = finalx;
+		else *xpos = finalx;
+		/*if (*xpos > finalx){
+			*xpos = finalx;
+		}*/
+		//else *xpos = finalx;
+	} else if (*ypos < 0){
+		if (win.pos_s->lines_into_file != 0){
+			win.pos_s->lines_into_file--;
+			print_file(win, currfile, 
+				GET_NEXT_FILE_OFFSET(win)
+			);
+			}
+		*ypos = oldy;
+	} else if (*ypos > ymax && !win.pos_s->at_end){
+		if (win.pos_s->printed_chars != currfile->size){
+			win.pos_s->lines_into_file++;
+			print_file(win, currfile, 
+				GET_NEXT_FILE_OFFSET(win)
+			);
+		}
+		finalx = win.pos_s->last_x_pos;
+		*ypos = oldy;
+		if (*xpos > finalx) *xpos = finalx;
+	} else if (*ypos > ymax && win.pos_s->at_end){
+		*ypos = oldy;
+	}
+}
+
+/*void
+move_cursor (WINDOW *activewin, struct editor *wins, int x, int y, int oldx, int oldy){
+	return;
+}*/
