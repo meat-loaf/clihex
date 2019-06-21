@@ -268,7 +268,32 @@ input_loop(struct editor win, struct file_buffer* currfile){
 		}
 		//at the end, we have a valid set of x and y positions
 		wmove(activewin, ypos, xpos);
+		if (activewin == win.mainwin){
+			unsigned int moved = 0;
+			if (xpos & 1){
+				moved = 1;
+				xpos--;
+				wmove(activewin, ypos, xpos);
+			}
+			if (oldx != xpos){
+				wmove(activewin, oldy, oldx & 1 ? oldx-1 : oldx);
+				wchgat(activewin, 2, A_NORMAL, 0, NULL);
+				wmove(activewin, ypos, xpos);
+			}
+			wchgat(activewin, 2, A_REVERSE, 0, NULL);
+			//wmove(win.asciiwin, MTOA(xpos), MTOA(ypos));
+			wmove(win.asciiwin, MTOA(ypos), MTOA(xpos));
+			wchgat(win.asciiwin, 1, A_REVERSE, 0, NULL);
+			if (moved){
+				xpos++;
+				wmove(activewin, ypos, xpos);
+			}
+		}
+		else if (activewin == win.asciiwin){
+			wchgat(win.mainwin, 2, A_REVERSE, ATOM(xpos), NULL);
+		}
 		wrefresh(win.cmdwin);
+		wrefresh(activewin == win.mainwin ? win.asciiwin : win.mainwin);
 		wrefresh(activewin);
 	}
 }
